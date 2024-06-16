@@ -1,0 +1,296 @@
+---
+title: "life_expectancy_24"
+output: pdf_document
+date: "2024-06-09"
+---
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. 
+
+```{r setup}
+packages <- c("readr", "tidyverse", "dplyr", "tidyr", "survey", "ggplot2", "car", "corrplot", "mgcv")
+install.packages(packages)
+library("readr")
+library("tidyverse")
+library("dplyr")
+library("tidyr")
+library("survey")
+library("ggplot2")
+library("car")
+library("corrplot")
+```
+
+```{r file loading}
+data <- file.choose()
+df <- read_csv(data)
+View(df)
+```
+Let's start by cleaning the data
+```{r data cleaning}
+# Filter out n/a values
+df  <- drop_na(df)
+# Convert status to numeric values, Developing = 1, Developed = 0
+df$Status <- dplyr::recode(df$Status, `Developing`=1, `Developed`=0)
+```
+
+```{r}
+# Initialize an empty tibble to store significant results
+significant_results <- tibble(
+  Variable = character(),
+  Correlation_Coefficient = numeric(),
+  P_Value = numeric()
+)
+
+for (column in 3:22) {
+  column_name <- colnames(no_na)[column]
+  cor_test_result <- cor.test(no_na[[column]], no_na$`Life expectancy`, use = "complete.obs")
+  if (cor_test_result$p.value <= 2.2e-16) {
+    # Store the significant results in the tibble
+    significant_results <- bind_rows(
+      significant_results,
+      tibble(
+        Variable = column_name,
+        Correlation_Coefficient = cor_test_result$estimate,
+        P_Value = cor_test_result$p.value
+      )
+    )
+  }
+  print(paste("Column:", column_name))
+  print(cor_test_result)
+}
+
+print("Significant columns with p-value <= 2.2e-16:")
+print(significant_results)
+```
+
+We can see that the variables that have the most significant correlation with life expectancy are adult mortality, alcohol, percentage expenditure, BMI, polio, diphtheria, HIV/AIDS, GDP, thinness (1-19 and 5-9), income composition of resources, and schooling. 
+
+The variables that have the largest (in magnitude) correlation coefficients are adult mortality, HIV/AIDS, income composition of resources, schooling, and thinness (1-19 and 5-9).
+
+```{r correlation tests}
+# Checking for correlation between life expectancy and Development status (categorical, so we need a t-test)
+t.test(no_na$`Life expectancy`, no_na$Status)
+```
+Let's visualize this relationship here. 
+```{r plotting life expectancies of developing countries vs developed countries}
+# Convert into factor
+df$Status <- factor(df$Status, levels = c(1, 0), labels = c("Developing", "Developed"))
+ggplot(df, aes(x = Status, y = `Life expectancy`, fill = Status)) +
+  geom_boxplot() +
+  labs(title = "Life Expectancy by Country Status",
+       x = "Country Status",
+       y = "Life Expectancy") +
+  theme_minimal() +
+  theme(legend.position = "none") 
+```
+We can see that development status has a drastic impact on life expectancy, with developed countries having a much higher median life expectancy compared to developing countries. This is a clear disparity. Let's take a look at how life expectancy varies by one of the significant variables, HIV/AIDS:
+
+```{r}
+ggplot(df, aes(x = `HIV/AIDS`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  labs(title = "Life Expectancy vs. HIV/AIDS by Country Status",
+       x = "HIV/AIDS Rate",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+```{r}
+log_model <- lm(`Life expectancy` ~ log(`HIV/AIDS`), data = df)
+
+# Add the logarithmic fit to the plot
+ggplot(df, aes(x = `HIV/AIDS`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  geom_smooth(method = "lm", formula = y ~ log(x), se = TRUE, color = "black") +  # Logarithmic fit
+  labs(title = "Life Expectancy vs. HIV/AIDS by Country Status (Logarithmic Fit)",
+       x = "HIV/AIDS Rate",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+
+We can see a roughly logistic and negative relationship between HIV/AIDS rate and life expectancy. Most significantly, we can see that all developed countries have very low HIV/AIDS rates and high life expectancies. Let's check out another variable, income composition of resources:
+
+```{r}
+ggplot(df, aes(x = `Income composition of resources`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  labs(title = "Life Expectancy vs. Income Composition of Resources",
+       x = "% Expenditure on Health",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+```{r}
+ggplot(df, aes(x = `Income composition of resources`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) + # Add points with a size of 3
+  geom_smooth(method = "lm", se = TRUE, size = 1, color = "black") + 
+  labs(title = "Life Expectancy vs. Income Composition of Resources (Linear Fit)",
+       x = "Income composition of Resources",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+
+We can see once again that developed countries have higher life expectancies and higher income compositoin of resources. There is a linear and positive relationship with a few select outliers. 
+
+Let's do a plot on adult mortality vs life expectancy:
+```{r}
+ggplot(df, aes(x = `Adult Mortality`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  labs(title = "Adult Mortality vs. Life Expectancy",
+       x = "Adult Mortality",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(df, aes(x = `Adult Mortality`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  geom_smooth(method = "lm", se = TRUE, size = 1, color = "black") + 
+  labs(title = "Adult Mortality vs. Life Expectancy (Linear Fit)",
+       x = "Adult Mortality",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+
+
+We see a negative, linear relationship between adult mortality and life expectancy. Developed countries have lower adult mortality and higher life expectancies. 
+
+Finally, let's look at the relationship between schooling and life expectancy:
+```{r}
+ggplot(df, aes(x = `Schooling`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  labs(title = "Schooling vs. Life Expectancy",
+       x = "Schooling",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(df, aes(x = `Schooling`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  geom_smooth(method = "lm", se = TRUE, size = 1, color = "black") + 
+  labs(title = "Schooling vs. Life Expectancy (Linear Fit)",
+       x = "Schooling",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+
+We see another roughly linear, positive relationship between schooling and life expectancy. We also see that developed countries have higher life expectancies and tend to have more years of schooling. 
+
+Now, let's look at thinness 1-19:
+```{r}
+column_names <- colnames(df)
+
+# Rename columns by index
+colnames(df)[19] <- "thinness1.19"
+colnames(df)[20] <- "thinness5.9"
+ggplot(df, aes(x = `thinness1.19`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  geom_smooth(method = "lm", se = TRUE, size = 1, color = "black") + 
+  labs(title = "thinness 1-19 years vs. Life Expectancy (Linear Fit)",
+       x = "thinness 1-19 year",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(df, aes(x = `thinness5.9`, y = `Life expectancy`, color = Status)) +
+  geom_point(size = 3) +  # Add points with a size of 3
+  geom_smooth(method = "lm", se = TRUE, size = 1, color = "black") + 
+  labs(title = "thinness 5-9 years vs. Life Expectancy (Linear Fit)",
+       x = "thinness 5-9 years",
+       y = "Life Expectancy",
+       color = "Country Status") +
+  theme_minimal()
+```
+Both thinness 5-9 and 1-19 years have a negative relationship with life expectancy. 
+
+Let's build a linear regression model using these variables vs. life expectancy, as our trends mainly seem to be linear. Let's assess collinearity accordingly after. 
+
+```{r}
+model <- lm(`Life expectancy` ~  `HIV/AIDS` + `Income composition of resources` + `Schooling` + `thinness1.19` + `thinness5.9`, data = df)
+summary(model)
+```
+
+```{r}
+model_poly <- lm(`Life expectancy` ~ poly(`HIV/AIDS`, 2) + `Income composition of resources` + `Schooling` + `thinness1.19` + `thinness5.9`, data = df)
+summary(model_poly)
+```
+
+Let's assess collinearity now:
+```{r}
+vif_results <- car::vif(model)
+print(vif_results)
+```
+Most of our variables' vif's are lower than 5, which is good news. There is low collinearity for most of our variables, except for thinness 1-19 and thinness 5-9. Let's also check if any of the variables are correlated with each other to decide which to drop:
+
+```{r}
+subset_data <- df[, c("Life expectancy", "Adult Mortality", "HIV/AIDS", "Income composition of resources", "Schooling",
+                      "thinness1.19", "thinness5.9")]
+
+# Calculate the correlation matrix
+correlation_matrix <- cor(subset_data, use = "complete.obs")
+print(correlation_matrix)
+```
+```{r}
+corrplot(correlation_matrix, method = "color", 
+         col = colorRampPalette(c("red", "white", "blue"))(200),
+         addCoef.col = "black",  # Add correlation coefficients
+         tl.col = "black", tl.srt = 45, # Text label color and rotation
+         title = "Correlation Matrix", mar=c(0,0,1,0), # Add title and adjust margins
+         cl.pos = "b", cl.cex = 0.75, # Color legend position and size
+         number.cex = 0.7)  # Font size of correlation coefficients
+```
+Let's try dropping thinness 1-19 seeing that it is not statistically significant in our model and that it and thinness 5-9 are highly correlated with each other, causing multicollinearity. 
+
+```{r}
+model_tweaked <- lm(`Life expectancy` ~ `Adult Mortality` + `HIV/AIDS` + `Income composition of resources` + `Schooling` + `thinness5.9`, data = df)
+summary(model_tweaked)
+```
+
+However, since the relationship between HIV/AIDS and life expectancy seems to be non-linear (through our EDA plotting) and the relationship between our other variables and life expectancy seem to be linear, let's add polynomial terms to capture both HIV/AIDS' linear effects and its curvature. 
+```{r}
+model_poly_tweaked <- lm(`Life expectancy` ~ poly(`HIV/AIDS`, 2) + `Income composition of resources` + `Schooling` + `thinness5.9`, data = df)
+summary(model_poly_tweaked)
+```
+
+Let's check for multicollinearity again:
+```{r}
+subset_data2 <- df[, c("Life expectancy", "Adult Mortality", "HIV/AIDS", "Income composition of resources", "Schooling",
+                      "thinness5.9")]
+
+# Calculate the correlation matrix
+correlation_matrix2 <- cor(subset_data2, use = "complete.obs")
+print(correlation_matrix2)
+
+corrplot(correlation_matrix2, method = "color", 
+         col = colorRampPalette(c("red", "white", "blue"))(200),
+         addCoef.col = "black",  # Add correlation coefficients
+         tl.col = "black", tl.srt = 45, # Text label color and rotation
+         title = "Correlation Matrix", mar=c(0,0,1,0), # Add title and adjust margins
+         cl.pos = "b", cl.cex = 0.75, # Color legend position and size
+         number.cex = 0.7)  # Font size of correlation coefficients
+```
+
+Since income composition of resources and schooling have a high correlation (r > 0.7), it may be wise to try to tweak our model and drop one of these. Let's try two different versions (one dropping income composition and another dropping schooling). Let's start by dropping income composition:
+```{r}
+model2 <- lm(`Life expectancy` ~ poly(`HIV/AIDS`, 2) + `Schooling` + `thinness5.9`, data = df)
+summary(model2)
+```
+
+```{r}
+model3 <- lm(`Life expectancy` ~ poly(`HIV/AIDS`, 2) + `Income composition of resources` + `thinness5.9`, data = df)
+summary(model3)
+```
+
+We can see that our RSE and multiple r-squared and adjusted r-squared are highest for our model including both income composition of resources and schooling. Since the correlation between those two variables is below 0.8 and VIF for both are below 5, and our model's performance (RSE and multiple r-squared) when including both variables outweighs the difference in the F-statistic (1368 vs 1489), we will keep both variables in our model. 
