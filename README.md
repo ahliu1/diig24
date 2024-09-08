@@ -1,3 +1,3 @@
-# Duke Impact Investing Group Data Challenge: Improving Life Expectancy
-Data challenge for Duke Impacting Investing Group Data Science division for '23-'24. 
+# Data Challenge: Improving Life Expectancy
+Data challenge for the Data Science division for '23-'24. 
 "The World Health Organization, as part of a recent initiative to reduce early deaths in developing countries, wants to learn more about what factors have the strongest correlation with life expectancy. Specifically, they would like to confidently fund specific sectors within developing countries that will have the overall greatest impact on improvements in life expectancy. You have been tasked with examining this data to provide guidance for WHO on where you believe they should focus their efforts on."
